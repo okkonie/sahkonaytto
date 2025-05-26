@@ -1,5 +1,6 @@
-import { TouchableOpacity, Animated, StyleSheet, useWindowDimensions } from 'react-native';
+import '@/app/global.css';
 import { useEffect, useRef } from 'react';
+import { Animated, TouchableOpacity, useWindowDimensions } from 'react-native';
 
 export default function Switch({ isOn, onToggle, activeColor = '#83f07f', inactiveColor = '#ccc' }) {
   const { width } = useWindowDimensions();
@@ -7,7 +8,7 @@ export default function Switch({ isOn, onToggle, activeColor = '#83f07f', inacti
 
   useEffect(() => {
     Animated.timing(switchTranslateX, {
-      toValue: isOn ? 24 : 0,
+      toValue: isOn ? 22 : 0,
       duration: 200,
       useNativeDriver: true,
     }).start();
@@ -15,33 +16,14 @@ export default function Switch({ isOn, onToggle, activeColor = '#83f07f', inacti
 
   return (
     <TouchableOpacity
-      style={[styles.switch, { backgroundColor: isOn ? activeColor : inactiveColor }]}
+      className='w-[44] h-[22] p-[2] rounded-full flex-row items-center justify-start'
+      style={{backgroundColor: isOn ? activeColor : inactiveColor}}
       onPress={onToggle}
     >
       <Animated.View 
-        style={[
-          styles.switchCircle, 
-          { transform: [{ translateX: switchTranslateX }] }
-        ]} 
+        className='w-[18] h-[18] rounded-full bg-white'
+        style={{ transform: [{ translateX: switchTranslateX }]}} 
       />
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  switch: {
-    width: 48,
-    height: 24,
-    borderRadius: 16,
-    padding: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  switchCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-  },
-});

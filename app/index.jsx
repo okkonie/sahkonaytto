@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { Dimensions, Modal, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import ColorPicker from '../components/colorpicker';
 import { checkAndFetchPrices, getDateStrings } from '../components/fetchprices';
 import Switch from '../components/switch';
 import "./global.css";
@@ -20,24 +21,31 @@ export default Home = () => {
   const [displayPrices, setDisplayPrices] = useState([]);
   const [addedPrices, setAddedPrices] = useState(0);
   const [isAlvOn, setAlvOn] = useState(true);
-  const [values, setValues] = useState([7, 15, 22]);
+  const [isTaxOn, setIsTaxOn] = useState(true);
+  const [values, setValues] = useState([
+        {price: 'default', 'color': '#16a34a'}, 
+        {price: 10.0, 'color': '#eab308'},
+        {price: 17.0, 'color': '#dc2626'}, 
+        {price: 25.0, 'color': '#be185d'}
+      ]);
+  const [bg, setBg] = useState({'bg': '#18181b', 'top': '#27272a', 'text': '#ffffff', 'text2': '#a1a1aa'});
   const [showSettings, setShowSettings] = useState(false);
   const [showAddedPrices, setShowAddedPrices] = useState(false);
   const [tempAddedPrices, setTempAddedPrices] = useState(0);
-  
 
   const calculate = (price) => {
     const cents = price * 100;
     const added = parseFloat(addedPrices);
     const baseValue = cents + added;
+    const tax = 2.827515;
 
     if (baseValue < 0) {
-      // Round negative numbers to 2 decimals as string
-      return baseValue.toFixed(2);
+      return isTaxOn ? (baseValue + tax).toFixed(2) : baseValue.toFixed(2);
     }
 
-    const valueWithAlv = isAlvOn ? 1.255 * baseValue : baseValue;
-    return valueWithAlv.toFixed(2);
+    const valueWithAlv = isAlvOn ? 1.255 * cents + added : baseValue;
+    const endValue = isTaxOn ? valueWithAlv + tax : valueWithAlv
+    return endValue.toFixed(2);
   };
 
   useEffect(() => {
@@ -45,15 +53,19 @@ export default Home = () => {
 
     const loadStoredValues = async () => {
       try {
-        const [storedValues, storedAddedPrices, storedAlvOn] = await Promise.all([
+        const [storedValues, storedAddedPrices, storedAlvOn, storedTaxOn, storedBg] = await Promise.all([
           AsyncStorage.getItem('userValues'),
           AsyncStorage.getItem('addedPrices'),
           AsyncStorage.getItem('isAlvOn'),
+          AsyncStorage.getItem('isTaxOn'),
+          AsyncStorage.getItem('bg'),
         ]);
 
         if (storedValues) setValues(JSON.parse(storedValues));
         if (storedAddedPrices) setAddedPrices(JSON.parse(storedAddedPrices));
         if (storedAlvOn) setAlvOn(JSON.parse(storedAlvOn));
+        if (storedTaxOn) setIsTaxOn(JSON.parse(storedTaxOn));
+        if (storedBg) setBg(JSON.parse(storedBg));
       } catch (error) {
         console.error('Error loading values from AsyncStorage:', error);
       }
@@ -77,44 +89,49 @@ export default Home = () => {
     initialize(); 
   }, []);
 
+
+  // !! FIX THIS
+
   useEffect(() => {
     const checkTime = () => {
-      if (prices) {
-        
-        const todayStr = getDateStrings().todayStr;
-        const tomorrowStr = getDateStrings().tomorrowStr;
-        const yesterdayStr = getDateStrings().yesterdayStr;
-        const todayPrices = prices[todayStr] || [];
-        setTodayPrices(todayPrices);
-        const yesterdayPrices = prices[yesterdayStr] || [];
-        setYesterdayPrices(yesterdayPrices);
-        const tomorrowPrices = prices[tomorrowStr] || [];
-        setTomorrowPrices(tomorrowPrices);
+      const now = new Date();
+      const tomorrow = getDateStrings().tomorrowStr;
 
-        const now = new Date();
-        const futurePrices = [];
+      const hasTomorrowPrices = prices && prices[tomorrow];
+      console.log(prices)
 
-        Object.entries(prices).forEach(([dateKey, hourlyPrices]) => {
-          hourlyPrices.forEach((entry) => {
-            const timeEnd = new Date(entry.time_end);
-            if (timeEnd > now) {
-              futurePrices.push(entry);
-            }
-          });
-        });
-        setDisplayPrices(futurePrices);
-
-        const tomorrow = getDateStrings().tomorrowStr;
-        const hasTomorrowPrices = Object.keys(prices).includes(tomorrow);
-        if (now.getHours() === 14 && !hasTomorrowPrices) {
-          console.log('Fetching new prices');
-          checkAndFetchPrices().then(setPrices);
-        }
+      if (now.getHours() >= 14 && !hasTomorrowPrices) {
+        checkAndFetchPrices().then(setPrices);
       }
     };
+
     checkTime();
-    const interval = setInterval(checkTime, 60000);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkTime, 60000); 
+    return () => clearInterval(interval); 
+  }, []);
+
+  useEffect(() => {
+    if (!prices) return;
+
+    const { todayStr, yesterdayStr, tomorrowStr } = getDateStrings();
+
+    setTodayPrices(prices[todayStr] || []);
+    setYesterdayPrices(prices[yesterdayStr] || []);
+    setTomorrowPrices(prices[tomorrowStr] || []);
+
+    const now = new Date();
+    const futurePrices = [];
+
+    Object.entries(prices).forEach(([_, hourlyPrices]) => {
+      hourlyPrices.forEach((entry) => {
+        const timeEnd = new Date(entry.time_end);
+        if (timeEnd > now) {
+          futurePrices.push(entry);
+        }
+      });
+    });
+
+    setDisplayPrices(futurePrices);
   }, [prices]);
 
   const toggleAlv = () => {
@@ -122,32 +139,40 @@ export default Home = () => {
     setAlvOn(newValue);
     AsyncStorage.setItem('isAlvOn', JSON.stringify(newValue));
   };
+
+  const toggleTax = () => {
+    const newValue = !isTaxOn;
+    setIsTaxOn(newValue);
+    AsyncStorage.setItem('isTaxOn', JSON.stringify(newValue));
+  };
+
+  const ToggleBg = (newBg) => {
+    setBg(newBg);
+    AsyncStorage.setItem('bg', JSON.stringify(newBg));
+  };
   
   const getColor = (price) => {
-    if (price >= values[2]) {
-      return '#be185d';
-    } else if (price >= values[1]) {
-      return '#dc2626';
-    } else if (price >= values[0]) {
-      return '#eab308';
+    if (price >= values[3].price) {
+      return values[3].color;
+    } else if (price >= values[2].price) {
+      return values[2].color;
+    } else if (price >= values[1].price) {
+      return values[1].color;
     };
-    return '#16a34a';
+    return values[0].color;
   };
 
   const getBarHeight = (price) => {
-    const maxPrice = Math.max(...displayPrices.map(p => p.EUR_per_kWh));
-    if (calculate(maxPrice) > values[2]) {
-      return `${(price / maxPrice) * 100}%`;
-    }
-    if (calculate(maxPrice) > values[1]) {
-      return `${(price / maxPrice) * 70}%`;
-    }
-    if (calculate(maxPrice) > values[0]) {
-      return `${(price / maxPrice) * 50}%`;
-    }
-    else {
-      return `${(price / maxPrice) * 30}%`;
-    }
+    const realPrice = calculate(price);
+    const maxPrice = Math.max(...displayPrices.map(entry => calculate(entry.EUR_per_kWh)))
+    let fullHeight = 0;
+    if (maxPrice <= 0 || realPrice < 0) return 0;
+    if (maxPrice >= values[3].price) {fullHeight = 95}
+    else if (maxPrice >= values[2].price) {fullHeight = 60}
+    else if (maxPrice >= values[1].price) {fullHeight = 45} 
+    else {fullHeight = 30}
+    
+    return (realPrice / maxPrice) * fullHeight + '%';
   };
 
   const getNumbers = (prices) => {
@@ -174,12 +199,21 @@ export default Home = () => {
     };
   };
 
-  return (
+  const handleChange = (newColor, newPrice, index) => {
+    const updated = [...values];
+    updated[index] = {
+      ...updated[index],
+      color: newColor,
+      price: newPrice || 0,
+    };
+    AsyncStorage.setItem('userValues', JSON.stringify(updated));
+    setValues(updated);
+  };
 
+  return (
     (loading || !prices || !displayPrices || !todayPrices) ? <Loading /> : (
 
-      <View className='flex-1 bg-zinc-900 justify-between'>
-
+      <View className='flex-1 justify-between' backgroundColor={bg.bg}>
         <StatusBar style='light'/>
 
         <ScrollView showsVerticalScrollIndicator={false} className='flex-1' bounces={false} overScrollMode="never">
@@ -207,15 +241,14 @@ export default Home = () => {
 
           <View className='w-full items-center pt-4'>
             <ScrollView 
-              className='h-full rounded-3xl bg-zinc-800 overflow-hidden shadow shadow-black' 
-              style={{ width: width * 0.95, height: height * 0.4 }} 
+              className='h-full rounded-3xl shadow shadow-black overflow-hidden' 
+              style={{ width: width * 0.95, height: height * 0.4, backgroundColor: bg.top}} 
               contentContainerStyle={{
                 paddingHorizontal: width * 0.02,
-                paddingVertical: height * 0.015,
-                gap: width * 0.02,
+                paddingVertical: height * 0.02,
               }}
               horizontal
-              showsHorizontalScrollIndicator={false}
+              showsHorizontalScrollIndicator={true}
               bounces={false}
               overScrollMode="never"
             >
@@ -228,56 +261,49 @@ export default Home = () => {
                 const adjustedPrice = calculate(entry.EUR_per_kWh);
 
                 return (
-                  <View key={entry.time_start} className='h-full justify-end items-center gap-1'>
-                    <View className='flex-1 justify-end'>
+                  <View key={entry.time_start} className='h-full justify-end items-center gap-1' style={{ width: width * 0.13 }}>
+                    <View className='justify-end items-center gap-1' style={{ height: getBarHeight(entry.EUR_per_kWh), minHeight: height * 0.035}}>
+                      <Text className='text-xs font-[Black]' style={{color: bg.text}}>
+                        {adjustedPrice}
+                      </Text>
                       <View 
-                        style={{ 
-                          height: getBarHeight(entry.EUR_per_kWh),
-                          alignItems: 'center',
-                          justifyContent: 'flex-end',
-                          paddingBottom: height * 0.01,
-                          minHeight: height * 0.03,
-                          width: (0.81 / 6) * width,
-                          borderRadius: 10,
-                          backgroundColor: getColor(adjustedPrice),
-                          borderCurve: 'circular',
-                        }}
-                      >
-                        <Text className='text-xs text-white font-[Black]'>
-                          {adjustedPrice}
-                        </Text>
-                      </View>
+                        className='flex-1 justify-end h-full rounded-full'
+                        style={{backgroundColor: getColor(adjustedPrice), width: width * 0.07}}
+                      />
                     </View>
-                    <Text className='text-md text-white font-[Bold]'>{formattedTime}</Text>
+                    <Text className='text-md font-[Bold]' style={{color: bg.text}}>{formattedTime}</Text>
                   </View>
                 );
               })}
             </ScrollView>
           </View>
           
-          <View className='self-center mt-4 justify-between bg-zinc-800 rounded-2xl shadow shadow-black mb-8 overflow-hidden' style={{width: width * .95}}>
+          <View 
+            className='self-center mt-4 justify-between rounded-2xl shadow shadow-black mb-8 overflow-hidden' 
+            style={{width: width * .95, backgroundColor: bg.top}}
+          >
 
-            <View className='flex-row justify-between items-center p-4 bg-zinc-800 shadow shadow-black'>
+            <View className='flex-row justify-between items-center p-4 shadow shadow-black' backgroundColor={bg.top}>
               <Pressable 
                 onPress={() => setSelectedDay('yesterday')} 
-                className='justify-center items-center rounded-full px-3 pb-1 w-1/3' 
+                className='justify-center items-center rounded-full px-3 py-1 w-1/3' 
                 style={{backgroundColor: selectedDay === 'yesterday' ? 'rgba(0,0,0,0.3)'  : 'transparent'}}
               >
-                <Text className='text-white text-md font-[Bold]'>Eilen</Text>
+                <Text className=' text-sm font-[Bold]' style={{color: bg.text}}>Eilen</Text>
               </Pressable>
               <Pressable 
                 onPress={() => setSelectedDay('today')} 
-                className='justify-center items-center rounded-full px-3 pb-1 w-1/3' 
+                className='justify-center items-center rounded-full px-3 py-1 w-1/3' 
                 style={{backgroundColor: selectedDay === 'today' ? 'rgba(0,0,0,0.3)'  : 'transparent'}}
               >
-                <Text className='text-white text-md font-[Bold]'>Tänään</Text>
+                <Text className=' text-sm font-[Bold]' style={{color: bg.text}}>Tänään</Text>
               </Pressable>
               <Pressable 
                 onPress={() => setSelectedDay('tomorrow')} 
-                className='justify-center items-center rounded-full px-3 pb-1 w-1/3' 
+                className='justify-center items-center rounded-full px-3 py-1 w-1/3' 
                 style={{backgroundColor: selectedDay === 'tomorrow' ? 'rgba(0,0,0,0.3)'  : 'transparent'}}
               >
-                <Text className='text-white text-md font-[Bold]'>Huomenna</Text>
+                <Text className='text-sm font-[Bold]' style={{color: bg.text}}>Huomenna</Text>
               </Pressable>
             </View>
 
@@ -290,43 +316,58 @@ export default Home = () => {
 
               if (!selectedPrices || selectedPrices.length === 0) {
                 return (
-                  <Text className='text-white mt-4 text-center'>Ei saatavilla olevia hintoja.</Text>
+                  <Text className=' my-4 text-center font-[Bold]' style={{color: bg.text}}>Ei hintoja saatavilla.</Text>
                 );
               }
               return (
                 <>
-                  <View className='self-center py-6 px-2 flex-row justify-between border-b border-zinc-900' style={{width: width * .95}}>
+                  <View className='self-center py-6 px-2 flex-row justify-between' style={{width: width * .95}}>
                     <View className='w-1/3 items-center gap-1'>
-                      <Text className='text-white text-sm font-[Bold]'>kallein klo {max.hour}</Text>
-                      <Text className='text-2xl font-[Black]' style={{color: getColor(calculate(max.value))}}>{calculate(max.value)}</Text>
+                      <Text className=' text-sm font-[Bold]' style={{color: bg.text}}>kallein klo {max.hour}</Text>
+                      <Text className='text-3xl font-[Black]' style={{color: getColor(calculate(max.value))}}>{calculate(max.value)}</Text>
                     </View>
-                    <View className='w-1/3 items-center gap-1 border-x border-zinc-900'>
-                      <Text className='text-white text-sm font-[Bold]'>keskihinta</Text>
-                      <Text className='text-2xl font-[Black]' style={{color: getColor(calculate(avg))}}>{calculate(avg)}</Text>
+                    <View className='w-1/3 items-center gap-1 border-x' style={{borderColor: bg.bg}}>
+                      <Text className='text-sm font-[Bold]' style={{color: bg.text}}>keskihinta</Text>
+                      <Text className='text-3xl font-[Black]' style={{color: getColor(calculate(avg))}}>{calculate(avg)}</Text>
                     </View>
                     <View className='w-1/3 items-center gap-1'>
-                      <Text className='text-white text-sm font-[Bold]'>halvin klo {min.hour}</Text>
-                      <Text className='text-2xl font-[Black]' style={{color: getColor(calculate(min.value))}}>{calculate(min.value)}</Text>
+                      <Text className='text-sm font-[Bold]' style={{color: bg.text}}>halvin klo {min.hour}</Text>
+                      <Text className='text-3xl font-[Black]' style={{color: getColor(calculate(min.value))}}>{calculate(min.value)}</Text>
                     </View>
                   </View>
+                  <View className='pb-2'>
                   {selectedPrices.map((entry) => {
                     const date = new Date(entry.time_start);
                     const formattedTime = date.toLocaleTimeString('en-US', {
                       hour: '2-digit',
                       hour12: false,
                     });
+                    const maxPrice = Math.max(...selectedPrices.map(e => calculate(e.EUR_per_kWh)));
                     const adjustedPrice = calculate(entry.EUR_per_kWh);
+                    const x = maxPrice >= values[3].price ? 100 : maxPrice >= values[2].price ? 75 : maxPrice >= values[1].price ? 50 : 20;
+                    const widthPercentage = adjustedPrice <= 0 ? 0 : (adjustedPrice * x) / maxPrice;
 
                     return (
-                      <View key={entry.time_start} className='px-4 py-2 flex-row justify-between items-center w-full rounded-xl border-b border-zinc-900'>
-                        <View className='flex-row items-center gap-2'>
-                          <View style={{ backgroundColor: getColor(adjustedPrice) }} className='h-4 w-4 rounded-full' />
-                          <Text className='text-md text-white font-[Bold]'>{formattedTime}</Text>
+                      <View
+                        key={entry.time_start} 
+                        className='px-8 py-3 flex-row justify-between items-center w-full self-center border-t border-[rgba(0,0,0,0.2)]'
+                      >
+                        <View className=' w-24 justify-between pr-5 flex-row items-center'>
+                          <Text className='text-md font-[Medium]' style={{color: bg.text}}>{formattedTime} : </Text>
+                          <Text className='text-md font-[Medium] rounded-xl text-right' style={{color: bg.text}}>{adjustedPrice}</Text>
                         </View>
-                        <Text className='text-md text-white font-[Bold] px-2 rounded-xl'>{adjustedPrice}</Text>
+                        <View className='justify-center flex-1'>
+                          <View className='flex-1 justify-center'>
+                            <View 
+                              style={{ backgroundColor: getColor(adjustedPrice), width: `${widthPercentage}%`, minWidth: '10%' }} 
+                              className='h-2 rounded-full' 
+                            />
+                          </View>
+                        </View>
                       </View>
                     );
                   })}
+                  </View>
                 </>
               );
             })()}
@@ -339,22 +380,36 @@ export default Home = () => {
           animationType="slide"
           onRequestClose={() => setShowSettings(false)}
         >
-          <View className='flex-1 bg-transparent justify-end'>
-            <View className="h-2/3 bg-zinc-800 shadow shadow-black rounded-t-3xl w-full overflow-hidden">
-              <View className='w-full flex-row justify-between items-center mb-4 bg-zinc-800 shadow shadow-black'>
-                <Text className='text-white text-xl font-[Black] pl-6'>ASETUKSET</Text>
+          <Pressable className='flex-1 bg-transparent justify-end' onPress={() => setShowSettings(false)}>
+            <Pressable onPress={() => {}} className="h-5/6 shadow shadow-black rounded-t-3xl w-full overflow-hidden" backgroundColor={bg.top}>
+              <View className='w-full flex-row justify-between items-center mb-4 shadow shadow-black' backgroundColor={bg.top}>
+                <Text className='text-xl font-[Black] pl-6' style={{color: bg.text}}>ASETUKSET</Text>
                 <TouchableOpacity onPress={() => setShowSettings(false)} className='p-6'>
-                  <FontAwesome name="close" size={24} color='#fff' />
+                  <FontAwesome name="close" size={24} color={bg.text} />
                 </TouchableOpacity>
               </View>
               <View className='w-full flex-row justify-between items-center py-4 px-8'>
-                <Text className='text-white text-md font-[Bold]'>näytä alv (25,5%)</Text>
-                <Switch isOn={isAlvOn} onToggle={toggleAlv} activeColor='#16a34a' inactiveColor='#18181b' />
+                <View className='gap-1'>
+                  <Text className='text-md font-[Medium]' style={{color: bg.text}}>näytä alv hinnassa</Text>
+                  <Text className='text-sm' style={{color: bg.text2}}>25,5%</Text>
+                </View>
+                <Switch isOn={isAlvOn} onToggle={toggleAlv} activeColor='#16a34a' inactiveColor={bg.text2} />
               </View>
               <View className='w-full flex-row justify-between items-center py-4 px-8'>
-                <Text className='text-white text-md font-[Bold]'>lisäkulut</Text>
-                <TouchableOpacity className='py-1 px-4 rounded-xl items-center justify-center border-b-2 border-zinc-900' onPress={() => setShowAddedPrices(true)}>
-                  <Text className='text-white font-[Bold] text-lg text-center'>{addedPrices}</Text>
+                <View className='gap-1'>
+                  <Text className='text-md font-[Medium]' style={{color: bg.text}}>näytä sähkövero</Text>
+                  <Text className='text-sm' style={{color: bg.text2}}>~ 2,83 c/kWh</Text>
+                </View>
+                <Switch isOn={isTaxOn} onToggle={toggleTax} activeColor='#16a34a' inactiveColor={bg.text2} />
+              </View>
+              <View className='w-full flex-row justify-between items-center py-4 px-8'>
+                <View className='gap-1'>
+                  <Text className='text-md font-[Medium]' style={{color: bg.text}}>lisäkulut</Text>
+                  <Text className='text-sm' style={{color: bg.text2}}>c/kWh</Text>
+                </View>
+                <TouchableOpacity className='items-center justify-center' onPress={() => setShowAddedPrices(true)}>
+                  <Text className='font-[Bold] text-lg text-center' style={{color: bg.text}}>{addedPrices}</Text>
+                  <View className='h-1 w-12 rounded-full' style={{backgroundColor: bg.text2}}/>
                 </TouchableOpacity>
                 {showAddedPrices && (
                   <Modal
@@ -363,12 +418,13 @@ export default Home = () => {
                     onRequestClose={() => setShowAddedPrices(false)}
                   >
                     <Pressable 
-                      className='flex-1 justify-center items-center bg-transparent'
+                      className='flex-1 justify-center items-center bg-[rgba(0,0,0,0.4)]'
                       onPress={() => {setShowAddedPrices(false)}}
                     >
-                      <View className='bg-zinc-900 p-4 rounded-xl flex-row justify-between w-2/3 items-center'>
+                      <View className='p-4 rounded-xl flex-row justify-between w-2/3 items-center' style={{backgroundColor: bg.top}}>
                         <TextInput
-                          className='text-white text-2xl font-[Black] flex-1'
+                          className='text-2xl font-[Black] flex-1'
+                          style={{color: bg.text}}
                           value={tempAddedPrices === 0 ? '' : tempAddedPrices.toString()}
                           onChangeText={(text) => {
                             if (text === '') {
@@ -384,7 +440,7 @@ export default Home = () => {
                           placeholder=""
                           placeholderTextColor="#ccc"
                           selectTextOnFocus={true}
-                          cursorColor="#101012"
+                          cursorColor="#fff"
                           maxLength={6}
                           autoFocus={true}
                           onSubmitEditing={() => {
@@ -394,14 +450,56 @@ export default Home = () => {
                           }}
                           returnKeyType="done"
                         />
-                        <Text className='text-white text-lg font-[Bold]'>c/kWh</Text>
+                        <Text className=' text-lg font-[Bold]' style={{color: bg.text}}>c/kWh</Text>
                       </View>
                     </Pressable>
                   </Modal>
                 )}
+              </View>
+              <View className='w-full flex-row justify-between items-center py-4 px-8'>
+                <Text className='text-md font-[Medium]' style={{color: bg.text}}>Teema</Text>
+                <View className='flex-row items-center gap-2'>
+                  <TouchableOpacity 
+                    onPress={() => ToggleBg({'bg': '#d4d4d8', 'top': '#e4e4e7', 'text': '#262626', 'text2': '#737373'})}
+                    className='h-8 w-12 rounded-md bg-zinc-300'
+                    style={{
+                      borderColor: bg.bg === '#d4d4d8' ? bg.text2 : 'transparent',
+                      borderWidth: bg.bg === '#d4d4d8' ? 2 : 0,
+                    }}
+                  />
+                  <TouchableOpacity 
+                    onPress={() => ToggleBg({'bg': '#18181b', 'top': '#27272a', 'text': '#ffffff', 'text2': '#a1a1aa'})}
+                    className='h-8 w-12 rounded-md bg-zinc-700'
+                    style={{
+                      borderColor: bg.bg === '#18181b' ? bg.text2 : 'transparent',
+                      borderWidth: bg.bg === '#18181b' ? 2 : 0,
+                    }}
+                  />
+                  <TouchableOpacity 
+                    onPress={() => ToggleBg({'bg': '#000', 'top': '#171717', 'text': '#fff', 'text2': '#a3a3a3'})}
+                    className='h-8 w-12 rounded-md bg-neutral-900'
+                    style={{
+                      borderColor: bg.bg === '#000' ? bg.text2 : 'transparent',
+                      borderWidth: bg.bg === '#000' ? 2 : 0,
+                    }}
+                  />
                 </View>
-            </View>
-          </View>
+              </View>
+              <View className='w-full flex-row justify-between items-center py-4 px-8'>
+                <Text className='text-md font-[Medium]' style={{color: bg.text}}>Värit</Text>
+                <View className='flex-row items-center gap-2'>
+                  {values.map((item, index) => (
+                    <ColorPicker
+                      key={index}
+                      value={item}
+                      bg={bg}
+                      onChange={(newColor, newPrice) => handleChange(newColor, newPrice, index)}
+                    />
+                  ))}
+                </View>
+              </View>
+            </Pressable>
+          </Pressable>
         </Modal>
       </View>
     )
