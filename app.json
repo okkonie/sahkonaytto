@@ -11,10 +11,6 @@
       "supportsTablet": true,
       "requireFullScreen": true
     },
-    "androidStatusBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#16A34A"
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/splash-icon.png",
@@ -32,7 +28,7 @@
       [
         "expo-screen-orientation",
         {
-          "initialOrientation": "ALL"
+          "initialOrientation": "DEFAULT"
         }
       ],
       "expo-router",
