@@ -2,7 +2,6 @@ import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useKeepAwake } from 'expo-keep-awake';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
@@ -38,21 +37,6 @@ export default Home = () => {
       {price: 25.0, 'color': '#be185d'}
     ]);
   const [bg, setBg] = useState({'bg': '#18181b', 'top': '#27272a', 'text': '#ffffff', 'text2': '#a1a1aa'});
-  const [isOrientationUnlocked, setIsOrientationUnlocked] = useState(false);
-
-  useEffect(() => {
-    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT);
-  }, []);
-
-  const toggleOrientation = async () => {
-    if (isOrientationUnlocked) {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT);
-    } else {
-      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.ALL);
-    }
-
-    setIsOrientationUnlocked(!isOrientationUnlocked);
-  };
 
   // keep awake 
   const [keepAwake, setKeepAwake] = useState(false);
@@ -496,12 +480,6 @@ export default Home = () => {
                       <Text className='text-md font-[Medium]' style={{color: bg.text}}>estä näytön sammuminen</Text>
                     </View>
                     <Switch value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ false: bg.text2, true: '#16a34a' }} thumbColor={'#fff'} />
-                  </View>
-                  <View className='w-full flex-row justify-between items-center py-4 px-8'>
-                    <View className='gap-1'>
-                      <Text className='text-md font-[Medium]' style={{color: bg.text}}>salli näytön kierto</Text>
-                    </View>
-                    <Switch value={isOrientationUnlocked} onValueChange={toggleOrientation} trackColor={{ false: bg.text2, true: '#16a34a' }} thumbColor={'#fff'} />
                   </View>
                   <View className='w-full flex-row justify-between items-center py-4 px-8'>
                     <View className='gap-1'>
