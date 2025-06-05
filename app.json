@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "electric",
-    "slug": "electric",
-    "version": "1.0.0",
+    "name": "sähkög",
+    "slug": "sahkog",
+    "version": "1.0.1",
     "icon": "./assets/images/icon.png",
     "scheme": "electric",
     "userInterfaceStyle": "automatic",
