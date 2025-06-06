@@ -17,7 +17,8 @@
         "backgroundColor": "#16A34A"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.okkonie.electric"
+      "package": "com.okkonie.electric",
+      "versionCode": 4
     },
     "web": {
       "bundler": "metro",
